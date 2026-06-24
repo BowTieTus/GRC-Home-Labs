@@ -1,52 +1,74 @@
-GRC Home Lab
+# GRC Home Lab
 
-I built this because I kept running into the same problem in GRC — everything is policies, documentation, and checklists. I wanted to understand how controls actually get enforced in a real system, so I built a small lab to figure that out.
+A hands-on GRC engineering lab built on AWS demonstrating how security controls are implemented and enforced in code — not just documented in policy.
 
-This is that lab.
+## What This Lab Covers
 
+Most GRC work gets reduced to writing policies and filling out checklists. This lab focuses on the engineering side: turning compliance requirements into automated, enforceable controls.
 
-What I did
+## Tools Used
 
-Started with a fresh AWS account and a MacBook. No prior cloud experience going into this.
+| Tool | Purpose |
+|---|---|
+| Terraform | Infrastructure as code — deploys AWS resources |
+| Checkov | Static IaC scanning — catches misconfigs before deploy |
+| Prowler | Continuous compliance monitoring against CIS/SOC 2 |
+| OPA (Rego) | Policy as code — enforces controls programmatically |
+| Trivy | Container image scanning for CVEs |
+| AWS CLI | Connects local tooling to AWS account |
 
-Deployed intentionally broken infrastructure using Terraform — an S3 bucket with no encryption, no versioning, and public access wide open. Then scanned it with Checkov before deploying anything. Checkov mapped each finding directly to a CIS or SOC 2 control, which was the first time things started clicking for me — the gap between "encryption is required per policy" and "here is the exact line of code that violates it."
+## Lab Structure
 
-Fixed everything and deployed the compliant version to AWS. Encryption, versioning, public access blocked. Ran Prowler against the whole account afterward and got a full compliance report against CIS, SOC 2, and a few other frameworks. A fresh account fails a lot of checks — that's expected, and it's good practice material.
-
-Wrote a policy in OPA that enforces the encryption requirement as actual code. Tested it against a non-compliant bucket (it caught the violation) and a compliant one (clean pass). The idea is that a policy doc says "encryption is required" and this makes that sentence executable.
-
-Scanned container images with Trivy and used the exit code flag to simulate a pipeline gate — if HIGH or CRITICAL CVEs are present, the scan exits with code 1, which is how you'd block a deployment in CI/CD.
-
-
-Tools
-
-ToolWhat it doesTerraformWrites and deploys infrastructure as codeCheckovScans IaC for misconfigs before anything is deployedProwlerRuns compliance checks against a live AWS accountOPA + RegoTurns policy requirements into executable rulesTrivyScans container images for known CVEsAWS CLIConnects local tooling to a real AWS environment
-
-
-Structure
-
+```
 grc-lab/
-├── s3-lab/
-│   ├── main.tf                # S3 bucket with all controls applied
+├── s3-lab/          # Terraform IaC + Checkov scan results
+│   ├── main.tf      # Compliant S3 bucket with encryption, versioning, public access block
 │   ├── outputs.tf
-│   └── output/                # Prowler compliance reports
-└── opa-lab/
-    ├── s3_policy.rego          # Encryption enforcement policy
-    ├── input.json              # Non-compliant test input (fails)
-    └── input_compliant.json    # Compliant test input (passes)
+│   └── output/      # Prowler compliance reports
+└── opa-lab/         # OPA policy as code
+    ├── s3_policy.rego       # Rego policy enforcing encryption requirement
+    ├── input.json           # Test input — non-compliant bucket (should fail)
+    └── input_compliant.json # Test input — compliant bucket (should pass)
+```
 
+## What I Built
 
-Control types demonstrated
+### 1. IaC Scanning with Checkov
+Wrote a Terraform S3 bucket with intentional misconfigurations (no encryption, no versioning, public access enabled), then scanned it with Checkov to surface violations mapped to CIS and SOC 2 controls before anything was deployed.
 
+**Controls demonstrated:** CKV_AWS_21 (versioning), CKV_AWS_145 (encryption at rest), CKV_AWS_53-56 (public access block)
 
-Preventive — Checkov stops misconfigured infrastructure before it deploys. OPA blocks policy violations before they reach production. Trivy gates container deployments on CVE severity.
-Detective — Prowler continuously checks the live AWS environment against CIS and SOC 2 and surfaces drift from the expected baseline.
+### 2. Compliant Infrastructure Deployment
+Fixed all Checkov findings and deployed a compliant S3 bucket to AWS with:
+- AES256 server-side encryption
+- Versioning enabled
+- All public access blocked
 
+### 3. Continuous Compliance Monitoring with Prowler
+Ran Prowler against the full AWS account to generate a compliance posture report against CIS AWS Foundations, SOC 2, and other frameworks. Identified real findings across IAM, logging, and monitoring controls.
 
+### 4. Policy as Code with OPA
+Wrote a Rego policy that encodes the encryption requirement as an executable rule. Tested against both a non-compliant input (returns violation message) and a compliant input (returns empty — clean pass).
 
-Frameworks referenced
+**Maps to:** SOC 2 CC6.1, CIS AWS 2.1.1
 
+### 5. Container Scanning with Trivy
+Scanned Python container images for known CVEs using Trivy. Used `--exit-code 1` flag to simulate a CI/CD pipeline gate that blocks deployment on HIGH or CRITICAL findings.
 
-CIS AWS Foundations Benchmark
-SOC 2 (CC6.1, CC7.1)
-NIST CSF
+## Key Takeaway
+
+Each tool in this lab represents a different control type:
+- **Checkov** — preventive control (stops bad config before deploy)
+- **Prowler** — detective control (finds drift in live environment)
+- **OPA** — preventive control (policy enforcement as code)
+- **Trivy** — preventive control (blocks vulnerable containers)
+
+## Frameworks Referenced
+- CIS AWS Foundations Benchmark
+- SOC 2 (CC6.1, CC7.1)
+- NIST CSF
+
+## Next Labs
+- CloudTrail + CloudWatch alerting (detective controls, audit logging)
+- AWS SCPs (preventive controls at org level)
+- Kubernetes + OPA Gatekeeper (policy enforcement in containers)
